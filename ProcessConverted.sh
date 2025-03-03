@@ -137,6 +137,8 @@ TagM4aFiles()
     return 1
   }
 
+  [ $totalDisks -ne 1 ] && Album="$Album [Disk $Disk]"
+
   TagM4a.sh "$dryrun" -D $Disk -N $totalDisks \
         -g "$Genre" -G "$Grouping" -Y $Year \
         -A "$Album" \
