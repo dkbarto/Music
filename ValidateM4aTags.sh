@@ -24,18 +24,38 @@ LANG=en_US.UTF-8
 
 mkdir -p "$FIXUP"
 
+usage()
+{
+  echo "Usage: $0 [-v] [-v] [-o] [-d basedir] <Artist> <Album> <Song>"
+  exit 1
+}
+
 verbose=0
 overwrite=0
 
-[ "$1" = "-v" ] && verbose=1 && shift
-[ "$1" = "-v" ] && verbose=2 && shift
+while [ $# -gt 0 ]
+do
+  # echo "Getopt $1"
+  case "$1" in
+  "-v")
+      verbose=$((verbose + 1))
+      shift
+      ;;
+  "-o")
+      overwrite=1
+      shift
+      ;;
+  "-d")
+      base="$2"
+      shift
+      shift
+      ;;
+  * | -h)
+    echo "Unknown flag: $1"
+    usage
+done
 
-[ "$1" = "-o" ] && overwrite=1 && shift
-
-[ ! -d "$MUSIC/$1" ] && {
-  echo "Usage: $0 [-v] [-v] [-o] <Artist> <Album> <Song>"
-  exit 1
-}
+[ ! -d "$base/$1" ] && usage
 
 Year=
 Genre=

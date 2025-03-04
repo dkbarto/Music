@@ -2,17 +2,78 @@
 # SearchDiscogs.sh and TagM4a.sh are in /Volumes/Music
 #
 PATH=$PATH:/Volumes/Music
+prog=$0
 
 dryrun=
-
+backup=
+useTempFile=
+Artist=
 echo=
 
-[ "$1" = "-d" ] && {
-  # must be -d because we pass it through to TagM4a.sh
-  dryrun=-d
-  echo=echo
-  shift
+usage()
+{
+  echo "$prog [-d] [-b] [-u] [-A \"Artist\"] -- Directory"
+  echo "    -b backup to Orig when running TagM4a.sh"
+  echo "    -d dryrun - don't make any changes"
+  echo "    -u - use temp files, don't overwrite in AtomicParsley"
+  echo "    -A \"Artist\" force artist to always be named."
+  echo "       forces any other artist named to become Performer"
+  echo "$prog -- Directory"
+  echo "$prog -d -A \"Stevie Wonder\" -- Directory"
+  exit 1 
 }
+
+#
+# getopt farks up the options with spaces
+# -A "this and that"
+# becomes
+# -A this and that
+#
+# args=$(getopt dbhA: $*)
+# if [ $? -ne 0 ]
+# then
+#   echo "Using error"
+#   exit 1
+# fi
+# 
+# set -- $args
+# 
+# echo "args is now $*"
+# 
+while [ $# -gt 0 ]
+do
+  # echo "Getopt $1"
+  case "$1" in
+  -b)
+    # must be -b because we pass it through to TagM4a.sh
+    backup=-b
+    shift
+    ;;
+  -d)
+    # must be -d because we pass it through to TagM4a.sh
+    dryrun=-d
+    echo=echo
+    shift
+    ;;
+  -u)
+    useTempFile=-u
+    shift
+    ;;
+  -A)
+    Artist="$2"
+    shift
+    shift
+    ;;
+  --)
+    shift
+    break
+    ;;
+  * | -h)
+    echo Unknown flag: $1
+    usage
+    ;;
+  esac
+done
 
 #
 # /Volumes/Music/Original has AIFF versions of files
@@ -122,10 +183,12 @@ setGenreGroupingYear()
 TagM4aFiles()
 {
   Artist="$1"
-  Album="$2"
-  Disk="$3"
-  totalDisks="$4"
-  Cover="$5"
+  Performer="$2"
+  Album="$3"
+  Disk="$4"
+  totalDisks="$5"
+  Cover="$6"
+  totalTracks=$7
 
   #
   # Sanity check
@@ -139,7 +202,14 @@ TagM4aFiles()
 
   [ $totalDisks -ne 1 ] && Album="$Album [Disk $Disk]"
 
-  TagM4a.sh "$dryrun" -D $Disk -N $totalDisks \
+  [ "$dryrun" != "" ] && echo \
+        TagM4a.sh $dryrun $backup $useTempFile -D $Disk -N $totalDisks -T $totalTracks \
+              -g "$Genre" -G "$Grouping" -Y $Year \
+              -A "$Album" \
+              -a "$Performer" -c "$Artist" \
+              -C "$Cover"
+
+  TagM4a.sh $dryrun $backup $useTempFile -D $Disk -N $totalDisks -T $totalTracks \
         -g "$Genre" -G "$Grouping" -Y $Year \
         -A "$Album" \
         -a "$Performer" -c "$Artist" \
@@ -152,6 +222,14 @@ TagM4aFiles()
   fi
 
   return 0
+}
+
+totalTracks=0
+
+CountTracks()
+{
+  tracks=$(find . -name *.m4a | wc -l)
+  totalTracks=$(expr $tracks '+' 1)
 }
 
 #
@@ -174,15 +252,21 @@ ProcessDisk()
   fi
 
   basis="$(pwd)"
-  for Artist in *
+
+  CountTracks
+
+  for Performer in *
   do
+    # reset where we are for the next performer
+    cd "$basis"
+
     # avoid cover.jpg files
-    [ ! -d "$Artist" ] && continue
-    cd "$basis/$Artist"
+    [ ! -d "$Performer" ] && continue
+    cd "$Performer"
     if [ $? -ne 0 ]
     then
       echo "Failed to change directory"
-      echo "$basis/$Artist"
+      echo "$basis/$Performer"
       pwd
       exit 123
     fi
@@ -203,7 +287,9 @@ ProcessDisk()
     # see main below.
     #
     [ "$Genre" = "" ] && setGenreGroupingYear "$Artist" "$Album"
-    TagM4aFiles "$Artist" "$Album" $diskNum $totalDisks "$Cover"
+    [ "$Artist" = "" ] && Artist="$Performer"
+  
+    TagM4aFiles "$Artist" "$Performer" "$Album" $diskNum $totalDisks "$Cover" $totalTracks
   done
 }
 

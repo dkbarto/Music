@@ -9,6 +9,9 @@ export LC_ALL=en_US.UTF-8
 dryrun=0
 verbose=0
 usebackup=0
+maximumTrackNum=0
+# default is to overwrite in place
+overWrite=--overWrite
 
 # echo "Starting with $*"
 
@@ -23,6 +26,7 @@ cat << EOF
   -v        verbose
   -b        backup originals
   -h        help
+  -u        update to *temp* file, don't overwrite
   -D <num>  disk number (required)
   -N <num>  total disks (required)
   -Y YYYY   year (required)
@@ -39,6 +43,21 @@ EOF
 }
 
 #
+# Show basic information
+# used on error and dryruns
+#
+ShowBasics()
+{
+  echo "\tyear       (Y) = $YEAR"
+  echo "\tartist     (a) = $artist"
+  echo "\tcoverArt   (C) = $coverArt"
+  echo "\tdiskNumber (D) = $diskNumber"
+  echo "\tTotalDisks (N) = $totalDisks"
+  echo "\tgenre      (g) = $genre"
+  echo "\tgrouping   (G) = $grouping"
+}
+
+#
 # Recover from backup (ORIG) if the 'usebackup' flag is set
 #
 recover()
@@ -47,31 +66,31 @@ recover()
   album="$2"
   
   ORIG="/Volumes/Music/Converted/Orig/$artist/$album"
-  [ $dryrun -eq 1 ] && {
-    echo "Recover from: $ORIG"
-    return
-  }
-
-  #
-  # Recover originals if run more then one time
-  # on the same directory
-  #
-  if [ -d "$ORIG" ]
+  if [ $dryrun -eq 1 ]
   then
-    echo
-    echo "Recover originals: $ORIG"
-    echo
-    for f in *
-    do
-      [ -f "$ORIG/$f" ] && {
-        sum1=$(sum "$ORIG/$f" | awk '{ print $1, $2}')
-        sum2=$(sum "$f" | awk '{ print $1, $2}')
-        [ "$sum1" != "$sum2" ] && {
-          [ $dryrun -eq 1 ] && echo "Restore $ORIG/$f"
-          cp "$ORIG/$f" .
+    echo "Recover from: $ORIG"
+  else
+    #
+    # Recover originals if run more then one time
+    # on the same directory
+    #
+    if [ -d "$ORIG" ]
+    then
+      echo
+      echo "Recover originals: $ORIG"
+      echo
+      for track in *
+      do
+        [ -f "$ORIG/$track" ] && {
+          sum1=$(sum "$ORIG/$track" | awk '{ print $1, $2}')
+          sum2=$(sum "$track" | awk '{ print $1, $2}')
+          [ "$sum1" != "$sum2" ] && {
+            [ $dryrun -eq 1 ] && echo "Restore $ORIG/$track"
+            cp "$ORIG/$track" .
+          }
         }
-      }
-    done
+      done
+    fi
   fi
 
   mkdir -p "$ORIG"
@@ -111,6 +130,10 @@ do
     verbose=1
     shift
     ;;
+  -u)
+    overWrite=""
+    shift
+    ;;
   -a)
     artist="$2"
     shift
@@ -127,7 +150,7 @@ do
     shift
     ;;
   -N)
-    TotalDisks="$2"
+    totalDisks="$2"
     shift
     shift
     ;;
@@ -144,8 +167,8 @@ do
     shift
     ;;
   -T)
-    totalTracks="$2"
-    # echo "totalTracks: $totalTracks"
+    maximumTrackNum="$2"
+    # echo "maximumTrackNum: $maximumTrackNum"
     shift
     shift
     ;;
@@ -180,7 +203,7 @@ echo
 echo ---------
 echo
 echo "Starting in $(pwd)"
-# echo "Dryrun => $dryrun"
+echo "Dryrun is $dryrun"
 echo
 echo
 echo
@@ -230,27 +253,23 @@ then
   exit 5
 fi
 
+[ $dryrun -eq 1 ] && ShowBasics
+
 if [ "$YEAR" = "" \
       -o "$artist" = "" \
       -o "$coverArt" = "" \
       -o "$diskNumber" = "" \
-      -o "$TotalDisks" = "" \
+      -o "$totalDisks" = "" \
       -o "$genre" = "" \
       -o "$grouping" = "" ]
 then
   echo "Missing something:"
-  echo "\tyear       (Y) = $YEAR"
-  echo "\tartist     (a) = $artist"
-  echo "\tcoverArt   (C) = $coverArt"
-  echo "\tdiskNumber (D) = $diskNumber"
-  echo "\tTotalDisks (N) = $TotalDisks"
-  echo "\tgenre      (g) = $genre"
-  echo "\tgrouping   (G) = $grouping"
+  ShowBasics
   usage
   exit 1
 fi
 
-if [ "$diskNumber" = "" -o $diskNumber -lt 1 -o $diskNumber -gt $TotalDisks ]
+if [ "$diskNumber" = "" -o $diskNumber -lt 1 -o $diskNumber -gt $totalDisks ]
 then
   echo "Invalid Disk Number (D): $diskNumber"
   usage
@@ -271,45 +290,47 @@ fi
 #
 # Doesn't work for multi-disk leading numbers '1-02 <filename>', etc.
 #
-TotalTracks=$(/bin/ls *.m4a | wc -l | sed -e 's/ //g')
-TotalTracksCnt=$(expr $TotalTracks '+' 0)
-echo "Total Tracks = $TotalTracks"
+totalTracks=$(/bin/ls *.m4a | wc -l | sed -e 's/ //g')
+totalTracksCnt=$(expr $totalTracks '+' 0)
+echo "Total Tracks = $totalTracks"
 
-TotalFiles=$(/bin/ls | wc -l | sed -e 's/ //g')
-TotalFileCnt=$(expr $TotalFiles '+' 0)
+[ $maximumTrackNum -eq 0 ] && maximumTrackNum=$totalTracksCnt
 
-if [ $TotalFileCnt -ne $TotalTracksCnt ]
+totalFiles=$(/bin/ls | wc -l | sed -e 's/ //g')
+totalFilesCnt=$(expr $totalFiles '+' 0)
+
+if [ $totalFilesCnt -ne $totalTracksCnt ]
 then
-  echo "Files don't align: File $TotalFileCnt, m4a $TotalTracksCnt"
+  echo "Files don't align: File $totalFilesCnt, m4a $totalTracksCnt"
   usage
   exit 1
 fi
 
 if [ $usebackup -eq 1 ]
 then
-  recover $artist $album
+  recover "$artist" "$album"
 fi
 
-for f in *.m4a
+for tracl in *.m4a
 do
-  [ $dryrun -eq 0 ] && echo && echo && echo Processing: $f
+  [ $dryrun -eq 0 ] && echo && echo && echo Processing: $track
 
-  [ $usebackup -eq 1 -a ! -f "$ORIG/$f" ] && cp "$f" "$ORIG"
+  [ $usebackup -eq 1 -a ! -f "$ORIG/$track" ] && cp "$track" "$ORIG"
 
-  tracknum=$(echo $f | sed -e 's/\([0-9]*\)\(.*\)/\1/')
-  if [ "$tracknum" = "" -o $tracknum -lt 1 -o $tracknum -gt $TotalTracksCnt ]
+  tracknum=$(echo $track | sed -e 's/\([0-9]*\)\(.*\)/\1/')
+  if [ "$tracknum" = "" -o $tracknum -lt 1 -o $tracknum -gt $maximumTrackNum ]
   then
-    echo "tracknum out of range: $tracknum"
+    echo "tracknum out of range: $tracknum, limit $maximumTrackNum"
     exit 1
   fi
   #
   # Strip leading digits and any leading spaces
   # Strip trailing extension
   #
-  title=$(echo "$f" | sed -e 's/\([0-9]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
+  title=$(echo "$track" | sed -e 's/\([0-9\-]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
   if [ "$title" = "" ]
   then
-    echo "Title missing: $f"
+    echo "Title missing: $track"
     exit 2
   fi
   
@@ -317,19 +338,25 @@ do
   n=
   [ $dryrun -eq 1 ] && echo=echo && n="\n\t"
   $echo AtomicParsley $n \
-              "$f" "$n"\
+              "$track" "$n"\
               --title="$title"         "$n"\
-              --tracknum=$tracknum/$TotalTracks \
-              --disk=$diskNumber/$TotalDisks    \
+              --tracknum=$tracknum/$maximumTrackNum \
+              --disk=$diskNumber/$totalDisks    \
               --year=$YEAR                 \
               --artist="$artist"           \
               --composer="$composer"       \
-              --albumArtist="$artist"      \
+              --albumArtist="$composer"    \
               --genre="$genre"         "$n"\
               --grouping="$grouping"       \
               --album="$album"             \
               --artwork="$coverArt"        \
-              --overWrite
+              $overWrite
+
+  if [ "$overWrite" = "" ]
+  then
+    mv *-temp-*.m4a "$track"
+  fi
+
 done
 
 exit 0
