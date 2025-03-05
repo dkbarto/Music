@@ -162,7 +162,7 @@ extractTags()
     # Atom "©alb" contains: Mono Singles (Disc 2)
     # Atom "covr" contains: 1 piece of artwork
     set $tag
-		[ $verbose -ge 2 ] && echo "Process $2"
+            	[ $verbose -ge 2 ] && echo "Process $2"
     case $2 in
     cpil|pgap|tmpo|©too) continue
       ;;
@@ -214,7 +214,7 @@ FixupSong()
   }
 
 	[ "$verbose" -gt 1 ] && echo AtomicParsley \"$track\" $AP_Flags
-  
+
 	echo "AtomicParsley \"$escSong\" $AP_Flags"   >> "$FIXUP/$artist/$album.sh"
 
 	[ $overwrite -eq 0 ] && doMove
@@ -277,7 +277,7 @@ BuildAPFlags()
 	}
 
 	[ $namValid -ne 1 ] && {
-	  title=$(echo "$track" | sed -e 's/\([0-9]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
+		title=$(echo "$track" | sed -e 's/\([0-9]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
 		if [ "$title" = "" ]
 		then
 			echo "Title missing: $artist/$album/$track"
@@ -313,7 +313,7 @@ ProcessArtistAlbum()
   artist="$1"
 	album="$2"
 	track="$3"
-	
+            
   cd "$BASE/$artist"
 
   if [ $? -ne 0 ]
