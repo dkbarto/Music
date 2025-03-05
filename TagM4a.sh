@@ -311,7 +311,7 @@ then
   recover "$artist" "$album"
 fi
 
-for tracl in *.m4a
+for track in *.m4a
 do
   [ $dryrun -eq 0 ] && echo && echo && echo Processing: $track
 
@@ -333,7 +333,7 @@ do
     echo "Title missing: $track"
     exit 2
   fi
-  
+
   echo=
   n=
   [ $dryrun -eq 1 ] && echo=echo && n="\n\t"
