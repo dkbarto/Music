@@ -135,12 +135,12 @@ setGenreGroupingYear()
   Grouping=
   Year=
 
-	Discogs=/tmp/data."$Artist"."$Album"
+  Discogs=/tmp/data."$Artist"."$Album"
   SearchDiscogs.sh "$Artist" "$Album" > "$Discogs"
 
-	Year=$(grep     Year     /tmp/data."$Artist"."$Album" | sed -e 's/Year=//')
-	Genre=$(grep    Genre    /tmp/data."$Artist"."$Album" | sed -e 's/Genre=//')
-	Grouping=$(grep Grouping /tmp/data."$Artist"."$Album" | sed -e 's/Grouping=//')
+  Year=$(grep     Year     /tmp/data."$Artist"."$Album" | sed -e 's/Year=//')
+  Genre=$(grep    Genre    /tmp/data."$Artist"."$Album" | sed -e 's/Genre=//')
+  Grouping=$(grep Grouping /tmp/data."$Artist"."$Album" | sed -e 's/Grouping=//')
 
   if [ "$Genre" = "" -o "$Grouping" = "" -o "$Year" = "" ]
   then 
@@ -152,7 +152,7 @@ setGenreGroupingYear()
     # ValidateM4aTags.sh - echo "echo \"$Artist/$Album: Year $Year; Group $Grouping; Genre $Genre\"" >> "$FIXUP/$Artist/Year-Group-Genre-$Album.sh"
   fi
 
-	/bin/rm "$Discogs"
+  /bin/rm "$Discogs"
 
   Year=$((Year + 0))
   if [ $Year -eq 0 ]
@@ -166,7 +166,7 @@ setGenreGroupingYear()
     }
   fi
 
-	[ "$dryrun" != "" ] && echo "ProcessArtistAlbum: $Song -- Year $Year; Group \"$Grouping\"; Genre \"$Genre\""
+  [ "$dryrun" != "" ] && echo "ProcessArtistAlbum: $Song -- Year $Year; Group \"$Grouping\"; Genre \"$Genre\""
   #
   # End theft
   #
