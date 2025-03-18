@@ -9,8 +9,6 @@
 # which are processed by PatchArt.sh and ApplyFixes.sh
 #
 
-set -e
-
 # TODO
 # 1 - need to escape special chars in $track (like $)
 # 2 - Manage file names with multiple spaces. ?? Flag them and do nothing?
@@ -26,11 +24,13 @@ mkdir -p "$FIXUP"
 
 usage()
 {
-  echo "Usage: $0 [-v] [-v] [-o] [-m] [-b basedir] -- <artist> <album> <track>"
+  echo "Usage: $0 [-v] [-v] [-o] [-m] [-d] [-b basedir] -- <artist> <album> <track>"
   echo "-m   - find .m4a files from the current directory and check tags"
   echo "-v   - set verbose level, may be releated to increase verbosity"
   echo "-o   - set the --overWrite flag for AtomicParsley"
   echo "-b   - set the basedir to start searching"
+  echo "-d   - dryrun; show what will happen without doing anything"
+  echo "       only works with -m"
   echo "<artist> - the artist to process"
   echo "<album>  - the <artist>/<album> to check"
   echo "<track>  - the specific track <album>/<artist>/<track>"
@@ -40,6 +40,7 @@ usage()
 verbose=0
 overwrite=0
 m4aFilesOnly=0
+dryrun=0
 
 while [ $# -gt 0 ]
 do
@@ -64,6 +65,10 @@ do
       ;;
   "-m")
       m4aFilesOnly=1
+      shift
+      ;;
+  "-d")
+      dryrun=1
       shift
       ;;
   * | -h)
@@ -128,9 +133,10 @@ doMove()
 
 extractTags()
 {
-  track="$1"
+	albumPath="$1"
+  track="$2"
 
- 	[ $verbose -ge 1 ] && echo "$artist/$album/$track"
+ 	[ $verbose -ge 2 ] && echo "extractTags $artist/$album/$track"
 
   #
   # Avoid sub-shell. The pipe loses the export of variables to the 'parent'
@@ -141,12 +147,20 @@ extractTags()
   #
   [ $verbose -ge 2 ] && echo "AtomicParsley $track --textdata"
 
-  set +e
-  AtomicParsley "$track" --textdata | sed -e 's/"//g' | grep "Atom" | egrep -v -e '----' > /tmp/lines
+  AtomicParsley "$track" --textdata > /tmp/rawdata
   [ $? -ne 0 ] && {
-  	echo "AtomicParsley failed on $artist/$album/$track"
+  	echo ""
+  	echo ""
+  	echo "        AtomicParsley failed on $artist/$album/$track"
+  	echo "echo AtomicParsley failed on $artist/$album/$track" >> $FIXUP/AtomicParsleyFailures.sh
+  	echo "AtomicParsley \"$albumPath/$track\" --textdata" >> $FIXUP/AtomicParsleyFailures.sh
+  	echo ""
+  	echo ""
+  	return
   }
-  set -e
+
+  cat /tmp/rawdata | sed -e 's/"//g' | grep "Atom" | egrep -v -e '----' > /tmp/lines
+  /bin/rm -f /tmp/rawdata
 
   while read tag
   do
@@ -162,9 +176,9 @@ extractTags()
     # Atom "©alb" contains: Mono Singles (Disc 2)
     # Atom "covr" contains: 1 piece of artwork
     set $tag
-            	[ $verbose -ge 2 ] && echo "Process $2"
+    [ $verbose -ge 3 ] && echo "Process $2"
     case $2 in
-    cpil|pgap|tmpo|©too) continue
+    cpil|pgap|tmpo|©too|soal|soar) continue
       ;;
     "©nam") namValid=1
       ;;
@@ -191,31 +205,42 @@ extractTags()
       totalCover=$4
       ;;
     *)
-      [ $verbose -ge 2 ] && {
-        echo "File: $artist/$album/$track"
-        echo "    Unknown tag $2"
-        echo "    $tag"
-      }
+    	[ $verbose -gt 2 ] && {
+				echo "File: $artist/$album/$track"
+				echo "    Unknown tag $2"
+				echo "    $tag"
+			}
+			;;
     esac
   done < /tmp/lines
+  /bin/rm /tmp/lines
 }
 
 FixupSong()
 {
-	track="$1"
-	AP_Flags="$2"
+	albumPath="$1"
+	album="$2"
+	track="$3"
+	AP_Flags="$4"
 
-  escSong=$(echo $track | sed -e 's/"/\\\\"/g')
-  
-  echo "cd \"$BASE/$artist/$album\""      >> "$FIXUP/$artist/$album.sh"
+  escAlbumPath=$(echo $albumPath | sed -e 's/"/\\\\"/g')
+  escAlbum=$(echo $album | sed -e 's/"/\\\\"/g')
+
+	[ $verbose -ge 1 ] && echo "FixupSong $artist/$album/$track into \"$FIXUP/$artist/$escAlbum.sh\""
+	
+	[ $dryrun -eq 1 ] && return 0
+
+	mkdir -p "$FIXUP/$artist"
+	
+  echo "cd \"$escAlbumPath\""      >> "$FIXUP/$artist/$escAlbum.sh"
   [ $overwrite -eq 1 ] && {
-    echo "echo Processing \"$artist/$track\"" >> "$FIXUP/$artist/$album.sh"
+    echo "echo Processing \"$artist/$track\"" >> "$FIXUP/$artist/$escAlbum.sh"
     AP_Flags="$AP_Flags --overWrite"
   }
 
 	[ "$verbose" -gt 1 ] && echo AtomicParsley \"$track\" $AP_Flags
 
-	echo "AtomicParsley \"$escSong\" $AP_Flags"   >> "$FIXUP/$artist/$album.sh"
+	echo "AtomicParsley \"$track\" $AP_Flags"   >> "$FIXUP/$artist/$escAlbum.sh"
 
 	[ $overwrite -eq 0 ] && doMove
 	CheckFailed
@@ -228,7 +253,18 @@ FixupSong()
 #
 BuildAPFlags()
 {
-	track="$1"
+	albumPath="$1"
+	artist="$2"
+  album="$3"
+  track="$4"
+
+	[ $verbose -gt 1 ] && echo "BuildAPFlags \"$artist\" \"$album\" \"$track\""
+
+	# special case for skipping "artists"
+	if [ "$artist" = "Ford Prefect" ]
+	then
+		return
+	fi
 
 	AP_Flags=""
 
@@ -263,9 +299,11 @@ BuildAPFlags()
     AP_Flags="$AP_Flags --album=\"$album\""
   }
   [ $covrValid -ne 1 ] && {
+  	mkdir -p "$FIXUP/$artist"
     echo "echo \"$track\": Cover art missing" >> "$FIXUP/$artist/CantFix-$album.sh"
   }
   [ $covrValid -eq 1 -a $totalCover -ne 1 ] && {
+  	mkdir -p "$FIXUP/$artist"
     echo "echo \"$track\": TOO MANY cover art entries $totalCover" >> "$FIXUP/$artist/CantFix-$album.sh"
   }
 
@@ -286,21 +324,33 @@ BuildAPFlags()
 		AP_Flags="$AP_Flags --title \"$title\""
 	}
 
-  [ "$AP_Flags" != "" ] && FixupSong "$track" "$AP_Flags"
+  [ "$AP_Flags" != "" ] && FixupSong "$albumPath" "$album" "$track" "$AP_Flags"
 
 	resetTags
 
 	return 0
 }
 
+curArtist=""
+curAlbum=""
+
 processM4a()
 {
-	artist="$1"
-  album="$2"
-  track="$3"
+	albumPath="$1"
+	artist="$2"
+  album="$3"
+  track="$4"
 
-  extractTags "$track"
-  BuildAPFlags "$track"
+	if [ $verbose -ge 1 -a "$artist" != "$curArtist" -o "$album" != "$curAlbum" ]
+	then
+		echo "$artist/$album"
+	fi
+
+	curAlbum="$album"
+	curArtist="$artist"
+	
+  extractTags "$albumPath" "$track"
+  BuildAPFlags "$albumPath" "$artist" "$album" "$track"
   return 0
 }
 
@@ -328,6 +378,8 @@ ProcessArtistAlbum()
     echo "No such album: $artist/$album"
     exit 1
   fi
+
+	albumPath="$BASE/$artist/$album"
 
   resetTags
   /bin/rm -rf "$FIXUP/$artist"
@@ -381,7 +433,7 @@ ProcessArtistAlbum()
   	then
   		echo  "No such track \"$track\" for $artist"
   	else
-    	processM4a "$artist" "$album" "$track"
+    	processM4a "$albumPath" "$artist" "$album" "$track"
     fi
   else
   	#
@@ -395,17 +447,15 @@ ProcessArtistAlbum()
 
 		for track in *.m4a
 		do
-			processM4a "$artist" "$album" "$track"
+			processM4a "$albumPath" "$artist" "$album" "$track"
 		done
   fi
-
-  if [ -f "$FIXUP/$artist/$album.sh" -a -s "$FIXUP/$artist/$album.sh" ]
-  then
- 	  echo "exit 0" >> "$FIXUP/$artist/$album.sh"
- 	else
- 	  /bin/rm -f "$FIXUP/$artist/$album.sh"
- 	fi
  	
+  if [ -e "$FIXUP/$artist/$album.sh" ]
+  then
+    echo "exit 0" >> "$FIXUP/$artist/$album.sh"
+ 	fi
+
  	# avoid banging on the server too fast (sigh)
  	sleep 2
 }
@@ -430,6 +480,36 @@ ProcessArtist()
   done
 }
 
+ProcessM4aFilesOnly()
+{
+	BASE=$(pwd -P)
+	
+  find "$BASE" -name '*.m4a' | while read track
+  do
+  	[ $verbose -gt 1 ] && echo "$track"
+  	albumPath=$(dirname "$track")
+  	
+  	track=$(basename "$track")
+  	album=$(basename "$albumPath")
+		artist=$(basename "$(dirname "$albumPath")")
+		
+    [ $verbose -gt 1 ] && {
+    	echo "BASE $BASE"
+    	echo "artist $artist"
+    	echo "album  $album"
+    	echo "track  $track"
+    }
+    
+    if [ $dryrun -ne 0 -o $verbose -gt 1 ]
+    then
+    	echo processM4a \"$albumPath\" \"$artist\" \"$album\" \"$track\"
+    fi
+
+		cd "$albumPath"
+		processM4a "$albumPath" "$artist" "$album" "$track"
+  done
+}
+
 #
 # main
 #
@@ -439,14 +519,8 @@ ProcessArtist()
 #
 if [ $m4aFilesOnly -eq 1 ]
 then
-  find . -name '*.m4a' | while read track
-  do
-    album=$(dirname "$track")
-    albumDir=$(dirname "$album")
-    artist=$(basename "$albumDir")
-    BASE=$(dirname "$artist")
-    processM4a "$artist" "$album" "$track"
-  done
+	ProcessM4aFilesOnly
+	exit 0
 fi
 
 BASE="$MUSIC"
@@ -475,9 +549,7 @@ else
 		}
 
 		ProcessArtist "$artist"
-		set +e
 		rmdir "$FIXUP/$artist" > /dev/null 2>&1
-		set -e
 	done
 fi
 

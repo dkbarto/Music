@@ -25,8 +25,12 @@ ProcessDir()
       return 1
     fi
     echo
+    /bin/rm "$f"
   done
   cd ..
+  # may fail if we have more work to do
+  # for this artist
+  rmdir "$1" > /dev/null 2>&1
   return 0
 }
 

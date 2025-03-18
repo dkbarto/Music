@@ -5,13 +5,23 @@
 #
 # To be run from the Fixup directory
 #
+warnonly=0
 
 MUSICROOT="/Volumes/Music"
 MUSIC="$MUSICROOT/Music/iTunes/iTunes Media/Music"
 
+#
+# Setup in Fixup Directory
+#
 cd "$MUSICROOT/Fixup"
 
-ROOT=$(pwd)
+FIXUP_ROOT=$(pwd)
+
+if [ "$1" = "-w" ]
+then
+  warnonly=1
+  shift
+fi
 
 Fixup()
 {
@@ -70,7 +80,7 @@ Fixup()
   # Loop over all songs listed as having problems
   # add art to those without it
   #
-  cat "$ROOT/$Artist/$CantFix" | grep 'Cover art missing' |\
+  cat "$FIXUP_ROOT/$Artist/$CantFix" | grep 'Cover art missing' |\
         sed -e 's/echo "//' -e 's/": Cover art missing//' | while read Song
   do
     #
@@ -93,18 +103,27 @@ Fixup()
 #
 # main()
 #
-for files in */CantFix*
+for CantFixMaster in */CantFix*
 do
-  cd "$ROOT"
+  cd "$FIXUP_ROOT"
   
-  Artist=$(echo $files | sed -e 's|/CantFix\(.*\)||')
+  Artist=$(echo $CantFixMaster | sed -e 's|/CantFix\(.*\)||')
 
   [ "$Artist" = '*' ] && exit 0
 
   cd "$Artist"
   for f in CantFix-*
   do
-    Fixup "$Artist" "$f" || exit 1
+    Fixup "$Artist" "$f"
+    if [ $? -ne 0 ]
+    then
+      [ $warnonly -eq 0 ] && exit 1
+    else
+      /bin/rm "$FIXUP_ROOT/$CantFixMaster" || {
+        echo "remove $FIXUP_ROOT/$CantFixMaster failed"
+        pwd
+      }
+    fi
   done
 done
 
