@@ -484,7 +484,7 @@ ProcessM4aFilesOnly()
 {
 	BASE=$(pwd -P)
 	
-  find "$BASE" -name '*.m4a' | while read track
+  find -s "$BASE" -name '*.m4a' | while read track
   do
   	[ $verbose -gt 1 ] && echo "$track"
   	albumPath=$(dirname "$track")
