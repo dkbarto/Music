@@ -307,20 +307,32 @@ BuildAPFlags()
     echo "echo \"$track\": TOO MANY cover art entries $totalCover" >> "$FIXUP/$artist/CantFix-$album.sh"
   }
 
-	[ $trknValid -ne 1 ] && {
+[ $trknValid -ne 1 ] && {
 		totalTracks=$(/bin/ls *.m4a | wc -l)
 		totalTracks=$((totalTracks + 0))
-		tracknum=$(echo "$track" | sed -e 's/\([0-9]*\)\(.*\)/\1/')
+		echo "$track" | egrep -E '^[0-9]*-[0-9]* .+' > /dev/null
+		if [ $? -eq 0 ]
+		then
+		  tracknum=$(echo "$track" | sed -e 's/\([0-9]*\)-\([0-9]*\) \(.*\)/\2/')
+		else
+		  tracknum=$(echo "$track" | sed -e 's/\([0-9]*\)\(.*\)/\1/')
+		fi
 		AP_Flags="$AP_Flags --tracknum=$tracknum/$totalTracks"
-	}
+}
 
 	[ $namValid -ne 1 ] && {
-		title=$(echo "$track" | sed -e 's/\([0-9]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
-		if [ "$title" = "" ]
+		echo "$track" | egrep -E '^[0-9]*-[0-9]* .+' > /dev/null
+		if [ $? -eq 0 ]
 		then
-			echo "Title missing: $artist/$album/$track"
-			exit 2
-		fi
+      title=$(echo "$track" | sed -e 's/\([0-9]*\)-\([0-9]*\) //' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
+		else
+      title=$(echo "$track" | sed -e 's/\([0-9]*\)//' -e 's/^ //' -e 's/^- //' -e "s/.m4a//")
+    fi
+    if [ "$title" = "" ]
+    then
+      echo "Title missing: $artist/$album/$track"
+      exit 2
+    fi
 		AP_Flags="$AP_Flags --title \"$title\""
 	}
 
@@ -486,7 +498,7 @@ ProcessM4aFilesOnly()
 	
   find -s "$BASE" -name '*.m4a' | while read track
   do
-  	[ $verbose -gt 1 ] && echo "$track"
+  	[ $verbose -gt 1 ] && echo && echo "Process: $track"
   	albumPath=$(dirname "$track")
   	
   	track=$(basename "$track")
